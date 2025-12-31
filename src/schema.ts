@@ -31,11 +31,11 @@ const conditionSchema: JSONSchemaType<Condition> = {
     {
       type: 'object',
       properties: {
-        kind: { const: 'comparison' },
+        kind: { enum: ['comparison', 'compare'] },
         lhs: operandSchema,
         operator: {
           type: 'string',
-          enum: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'in']
+          enum: ['==', '!=', '>', '>=', '<', '<=', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'in']
         },
         rhs: operandSchema
       },
@@ -45,7 +45,7 @@ const conditionSchema: JSONSchemaType<Condition> = {
     {
       type: 'object',
       properties: {
-        kind: { enum: ['all', 'any'] },
+        kind: { enum: ['all', 'any', 'and', 'or'] },
         conditions: {
           type: 'array',
           items: { $ref: '#/definitions/condition' },
@@ -62,6 +62,40 @@ const conditionSchema: JSONSchemaType<Condition> = {
         condition: { $ref: '#/definitions/condition' }
       },
       required: ['kind', 'condition'],
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: {
+        kind: { const: 'exists' },
+        fact: operandSchema
+      },
+      required: ['kind', 'fact'],
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: {
+        kind: { const: 'in' },
+        value: operandSchema,
+        options: {
+          type: 'array',
+          items: operandSchema,
+          minItems: 1
+        }
+      },
+      required: ['kind', 'value', 'options'],
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: {
+        kind: { const: 'matches' },
+        value: operandSchema,
+        pattern: { type: 'string' },
+        caseInsensitive: { type: 'boolean', nullable: true }
+      },
+      required: ['kind', 'value', 'pattern'],
       additionalProperties: false
     }
   ],
@@ -86,6 +120,26 @@ const actionSchema: JSONSchemaType<Action> = {
     {
       type: 'object',
       properties: {
+        kind: { const: 'increment' },
+        target: { type: 'string', pattern: '^[a-zA-Z][a-zA-Z0-9_]*\\.[a-zA-Z][a-zA-Z0-9_]*$' },
+        value: { type: 'number' }
+      },
+      required: ['kind', 'target', 'value'],
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: {
+        kind: { const: 'append' },
+        target: { type: 'string', pattern: '^[a-zA-Z][a-zA-Z0-9_]*\\.[a-zA-Z][a-zA-Z0-9_]*$' },
+        value: operandSchema
+      },
+      required: ['kind', 'target', 'value'],
+      additionalProperties: false
+    },
+    {
+      type: 'object',
+      properties: {
         kind: { const: 'emit' },
         event: { type: 'string' },
         payload: { type: 'object', nullable: true }
@@ -97,10 +151,10 @@ const actionSchema: JSONSchemaType<Action> = {
       type: 'object',
       properties: {
         kind: { const: 'route' },
-        queue: { type: 'string' },
+        toQueue: { type: 'string' },
         reason: { type: 'string', nullable: true }
       },
-      required: ['kind', 'queue'],
+      required: ['kind', 'toQueue'],
       additionalProperties: false
     }
   ]
@@ -113,15 +167,28 @@ const ruleSchema: JSONSchemaType<Rule> = {
     name: { type: 'string' },
     description: { type: 'string', nullable: true },
     priority: { type: 'number', nullable: true },
-    mode: { type: 'string', enum: ['all', 'first'], nullable: true },
+    mode: { type: 'string', enum: ['all', 'first', 'allMatches', 'firstMatch'], nullable: true },
     when: conditionSchema,
+    then: {
+      type: 'array',
+      items: actionSchema,
+      minItems: 1,
+      nullable: true
+    },
+    else: {
+      type: 'array',
+      items: actionSchema,
+      nullable: true
+    },
     actions: {
       type: 'array',
       items: actionSchema,
-      minItems: 1
-    }
+      nullable: true
+    },
+    tags: { type: 'array', items: { type: 'string' }, nullable: true },
+    stopProcessing: { type: 'boolean', nullable: true }
   },
-  required: ['id', 'name', 'when', 'actions'],
+  required: ['id', 'name', 'when'],
   additionalProperties: false
 };
 
@@ -131,7 +198,7 @@ const constraintSchema: JSONSchemaType<Constraint> = {
     id: { type: 'string' },
     description: { type: 'string' },
     assert: conditionSchema,
-    severity: { type: 'string', enum: ['error', 'warn'], nullable: true }
+    severity: { type: 'string', enum: ['error', 'warn', 'warning'], nullable: true }
   },
   required: ['id', 'description', 'assert'],
   additionalProperties: false
@@ -203,7 +270,7 @@ export const programSchema: JSONSchemaType<Program> = {
       type: 'object',
       nullable: true,
       properties: {
-        ruleEvaluation: { type: 'string', enum: ['all', 'first'] }
+        ruleEvaluation: { type: 'string', enum: ['all', 'first', 'allMatches', 'firstMatch'] }
       },
       required: ['ruleEvaluation'],
       additionalProperties: false

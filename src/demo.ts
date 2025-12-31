@@ -25,17 +25,22 @@ if (result.warnings.length) {
 }
 
 console.log('\nRunning program against sample input...');
-const execution = runProgram(program, { order: { total: 120, vip: false } });
-console.log('Output:', JSON.stringify(execution.output, null, 2));
-console.log('Fired rules:', execution.firedRules.map((r) => `${r.rule.id} (matched=${r.matched})`).join(', '));
-console.log('Constraint checks:', execution.constraints.map((c) => `${c.constraint.id}: ${c.passed ? 'passed' : 'failed'}`).join(', '));
+const execution = runProgram(program, { order: { total: 120, vip: false } }, { enableActions: true });
+console.log('Output:', JSON.stringify(execution.resultState, null, 2));
+console.log('Fired rules:', execution.trace.map((r) => `${r.ruleId} (matched=${r.evaluatedWhen})`).join(', '));
+console.log(
+  'Constraint checks:',
+  [...execution.constraintReport.passed, ...execution.constraintReport.failed]
+    .map((c) => `${c.constraint.id}: ${c.passed ? 'passed' : 'failed'}`)
+    .join(', '),
+);
 
 console.log('\nRunning examples...');
 const exampleResults = runExamples(program);
 exampleResults.forEach((example) => {
   const constraintSummary =
-    example.constraints.length > 0
-      ? ` | constraints: ${example.constraints
+    example.constraints.failed.length + example.constraints.passed.length > 0
+      ? ` | constraints: ${[...example.constraints.failed, ...example.constraints.passed]
           .map((c) => `${c.constraint.id}:${c.passed ? 'ok' : 'FAILED'}`)
           .join(', ')}`
       : '';

@@ -22,23 +22,41 @@ export interface FactOperand {
 
 export interface ValueOperand {
   kind: 'value';
-  value: string | number | boolean;
+  value: string | number | boolean | null;
   units?: string;
 }
 
 export type Operand = FactOperand | ValueOperand;
 
-export type Comparator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'in';
+export type Comparator = '==' | '!=' | '>' | '>=' | '<' | '<=' | 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'in';
 
-export interface ComparisonCondition {
-  kind: 'comparison';
+export interface CompareCondition {
+  kind: 'compare' | 'comparison';
   lhs: Operand;
   operator: Comparator;
   rhs: Operand;
 }
 
+export interface ExistsCondition {
+  kind: 'exists';
+  fact: FactOperand;
+}
+
+export interface InCondition {
+  kind: 'in';
+  value: Operand;
+  options: Operand[];
+}
+
+export interface MatchesCondition {
+  kind: 'matches';
+  value: Operand;
+  pattern: string;
+  caseInsensitive?: boolean;
+}
+
 export interface BooleanCondition {
-  kind: 'all' | 'any';
+  kind: 'all' | 'any' | 'and' | 'or';
   conditions: Condition[];
 }
 
@@ -47,12 +65,24 @@ export interface NotCondition {
   condition: Condition;
 }
 
-export type Condition = ComparisonCondition | BooleanCondition | NotCondition;
+export type Condition = CompareCondition | ExistsCondition | InCondition | MatchesCondition | BooleanCondition | NotCondition;
 
 export interface SetAction {
   kind: 'set';
   target: string; // path like "order.discountPercent"
-  value: ValueOperand;
+  value: Operand;
+}
+
+export interface IncrementAction {
+  kind: 'increment';
+  target: string;
+  value: number;
+}
+
+export interface AppendAction {
+  kind: 'append';
+  target: string;
+  value: Operand;
 }
 
 export interface EmitAction {
@@ -63,27 +93,32 @@ export interface EmitAction {
 
 export interface RouteAction {
   kind: 'route';
-  queue: string;
+  toQueue: string;
   reason?: string;
 }
 
-export type Action = SetAction | EmitAction | RouteAction;
+export type Action = SetAction | IncrementAction | AppendAction | EmitAction | RouteAction;
 
 export interface Rule {
   id: string;
   name: string;
   description?: string;
   priority?: number;
-  mode?: 'all' | 'first';
+  mode?: 'all' | 'first' | 'allMatches' | 'firstMatch';
   when: Condition;
-  actions: Action[];
+  then?: Action[];
+  else?: Action[];
+  /** Legacy field kept for backward compatibility */
+  actions?: Action[];
+  tags?: string[];
+  stopProcessing?: boolean;
 }
 
 export interface Constraint {
   id: string;
   description: string;
   assert: Condition;
-  severity?: 'error' | 'warn';
+  severity?: 'error' | 'warn' | 'warning';
 }
 
 export interface Example {
@@ -119,7 +154,7 @@ export interface TranslationEnvelopeProgram {
 export type TranslationEnvelope = TranslationEnvelopeProgram | ClarificationRequest;
 
 export interface ProgramConfig {
-  ruleEvaluation: 'all' | 'first';
+  ruleEvaluation: 'all' | 'first' | 'allMatches' | 'firstMatch';
 }
 
 export interface Program {
@@ -148,21 +183,37 @@ export interface RuleCoverage {
 export interface ConditionTrace {
   condition: Condition;
   result: boolean;
+  details?: Record<string, unknown>;
   children?: ConditionTrace[];
 }
 
 export interface ActionTrace {
   action: Action;
   applied: boolean;
-  previousValue?: any;
-  newValue?: any;
+  path?: string;
+  beforeValue?: any;
+  afterValue?: any;
+  actionId: string;
+  ruleId: string;
+  conflict?: boolean;
 }
 
 export interface RuleTrace {
-  rule: Rule;
-  matched: boolean;
-  conditionTrace: ConditionTrace;
-  actions: ActionTrace[];
+  ruleId: string;
+  ruleName: string;
+  priority?: number;
+  evaluatedWhen: boolean;
+  why: ConditionTrace;
+  actionsApplied: ActionTrace[];
+  stateDiff: StateDiff[];
+  stopProcessing?: boolean;
+  warnings?: string[];
+}
+
+export interface StateDiff {
+  path: string;
+  before: any;
+  after: any;
 }
 
 export interface ConstraintResult {
@@ -171,15 +222,51 @@ export interface ConstraintResult {
   trace: ConditionTrace;
 }
 
+export interface ConstraintReport {
+  passed: ConstraintResult[];
+  failed: ConstraintResult[];
+  hasFailures: boolean;
+  hasErrors: boolean;
+  errorCount: number;
+  warningCount: number;
+}
+
+export interface NormalizedActionLog {
+  actionId: string;
+  ruleId: string;
+  kind: Action['kind'];
+  path?: string;
+  before?: any;
+  after?: any;
+  payload?: Record<string, unknown>;
+}
+
+export interface ExecutionOptions {
+  mode?: 'firstMatch' | 'allMatches';
+  maxRuleFirings?: number;
+  enableActions?: boolean;
+  clock?: number;
+  debugTrace?: boolean;
+  loopUntilSettled?: boolean;
+  evaluateExamples?: boolean;
+}
+
 export interface ExecutionResult {
-  output: Record<string, unknown>;
-  firedRules: RuleTrace[];
-  constraints: ConstraintResult[];
+  resultState: Record<string, unknown>;
+  actions: NormalizedActionLog[];
+  trace: RuleTrace[];
+  constraintReport: ConstraintReport;
+  testReport?: ExampleResult[];
+  success?: boolean;
+  conflictWarnings?: string[];
+  ruleFirings?: number;
+  hitRuleLimit?: boolean;
 }
 
 export interface ExampleResult {
   example: Example;
   passed: boolean;
   actualOutput: Record<string, unknown>;
-  constraints: ConstraintResult[];
+  constraints: ConstraintReport;
+  trace: RuleTrace[];
 }

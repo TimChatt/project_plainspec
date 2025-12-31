@@ -86,13 +86,18 @@ This repo now includes a TypeScript schema + validator for the AST, a simple exe
 npm install
 ```
 
-### Validate and run the sample program
+### Validate and run the sample programs
 ```bash
 npm run validate:sample
 ```
 
 The script loads `examples/discount-program.json`, validates it against the schema, reports any errors plus lint warnings (vague words, missing units when fields declare them), runs a sample input through the rules engine, and executes the bundled examples.
 It also prints how many examples exercise each rule.
+
+Additional ready-to-run fixtures:
+
+- `examples/routing-program.json` demonstrates route actions and a simple constraint ensuring a decision is produced. Try running `npm run cli -- validate examples/routing-program.json` then `npm run cli -- examples examples/routing-program.json`.
+- `examples/conflict-program.json` shows conflict logging when multiple rules write the same field at different priorities. Run the examples to see conflict warnings in the trace.
 
 Alternatively, use the generic CLI to target any AST file or controlled-English spec:
 
@@ -102,6 +107,8 @@ npm run cli -- validate examples/discount-program.json
 
 # Execute an AST program against a payload
 npm run cli -- run examples/discount-program.json --input examples/discount-input.json
+# Add --loop-until-settled to keep evaluating while the state changes or --dry-run to inspect traces without mutating
+# npm run cli -- run examples/discount-program.json --input examples/discount-input.json --loop-until-settled --dry-run
 
 # Run all examples embedded in the AST
 npm run cli -- examples examples/discount-program.json

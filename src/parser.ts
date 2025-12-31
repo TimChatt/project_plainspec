@@ -150,7 +150,7 @@ function parseActions(text: string, errors: string[]): Action[] {
     }
     const routeMatch = part.match(/^route\s+to\s+queue\s+"?([\w-]+)"?/i);
     if (routeMatch) {
-      actions.push({ kind: 'route', queue: routeMatch[1] });
+      actions.push({ kind: 'route', toQueue: routeMatch[1] });
       continue;
     }
     errors.push(`Unrecognised action: "${part}"`);
