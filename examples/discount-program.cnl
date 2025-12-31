@@ -1,0 +1,12 @@
+Domain: business-rules
+Description: Simple discount rule demo in controlled English
+
+Entity order: total number (USD); discountPercent number (percent); vip boolean
+
+Rule discount-over-100 (priority 1): If order.total is greater than 100 USD then set order.discountPercent to 10 percent
+Rule vip-floor (priority 2): If order.vip is true then set order.discountPercent to 5 percent
+
+Constraint discount-cap: order.discountPercent must be at most 30 percent
+
+Example order-120: Given order.total = 120, order.vip = false -> Expect order.discountPercent = 10
+Example vip-order: Given order.total = 30, order.vip = true -> Expect order.discountPercent = 5
