@@ -5,10 +5,11 @@
   "type": "commonjs",
   "scripts": {
     "build": "tsc --noEmit",
-    "validate:sample": "ts-node src/demo.ts",
-    "parse:sample": "ts-node src/parse.ts",
-    "translate:prompt": "ts-node src/translate.ts",
-    "cli": "ts-node src/cli.ts"
+    "compile": "tsc",
+    "validate:sample": "npm run compile && node dist/demo.js",
+    "parse:sample": "npm run compile && node dist/parse.js",
+    "translate:prompt": "npm run compile && node dist/translate.js",
+    "cli": "npm run compile && node dist/cli.js"
   },
   "dependencies": {
     "ajv": "^8.17.1"

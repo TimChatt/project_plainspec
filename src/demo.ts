@@ -33,8 +33,14 @@ console.log('Constraint checks:', execution.constraints.map((c) => `${c.constrai
 console.log('\nRunning examples...');
 const exampleResults = runExamples(program);
 exampleResults.forEach((example) => {
+  const constraintSummary =
+    example.constraints.length > 0
+      ? ` | constraints: ${example.constraints
+          .map((c) => `${c.constraint.id}:${c.passed ? 'ok' : 'FAILED'}`)
+          .join(', ')}`
+      : '';
   console.log(
-    `${example.example.id}: ${example.passed ? 'passed' : 'FAILED'} -> ${JSON.stringify(example.actualOutput)}`
+    `${example.example.id}: ${example.passed ? 'passed' : 'FAILED'}${constraintSummary} -> ${JSON.stringify(example.actualOutput)}`
   );
 });
 

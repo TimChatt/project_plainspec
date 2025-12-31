@@ -6,7 +6,6 @@
     "esModuleInterop": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "types": ["node"],
     "skipLibCheck": true,
     "outDir": "dist"
   },
