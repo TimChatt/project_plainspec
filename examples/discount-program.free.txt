@@ -1,0 +1,1 @@
+We want to reward loyal customers. When a customer's total purchase amount in an order is more than 100 dollars, give them a 10 percent discount and mark the order for review. Orders over 200 dollars should be routed to the priority queue. Discounts must never exceed 30 percent of the order total. If an order has no paid invoices in the last month, ask what to do.

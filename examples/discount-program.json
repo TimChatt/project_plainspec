@@ -1,0 +1,82 @@
+{
+  "domain": "business-rules",
+  "description": "Simple discount rule demo for PlainSpec V1",
+  "entities": [
+    {
+      "name": "order",
+      "fields": [
+        { "name": "total", "type": "number", "units": "USD" },
+        { "name": "discountPercent", "type": "number", "units": "percent" },
+        { "name": "vip", "type": "boolean" }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "discount-over-100",
+      "name": "Apply 10 percent discount when total exceeds 100",
+      "priority": 1,
+      "when": {
+        "kind": "comparison",
+        "lhs": { "kind": "fact", "path": "order.total", "units": "USD" },
+        "operator": "gt",
+        "rhs": { "kind": "value", "value": 100, "units": "USD" }
+      },
+      "actions": [
+        {
+          "kind": "set",
+          "target": "order.discountPercent",
+          "value": { "kind": "value", "value": 10, "units": "percent" }
+        }
+      ]
+    },
+    {
+      "id": "vip-floor",
+      "name": "Apply minimum 5 percent for VIP customers",
+      "priority": 2,
+      "when": {
+        "kind": "comparison",
+        "lhs": { "kind": "fact", "path": "order.vip" },
+        "operator": "eq",
+        "rhs": { "kind": "value", "value": true }
+      },
+      "actions": [
+        {
+          "kind": "set",
+          "target": "order.discountPercent",
+          "value": { "kind": "value", "value": 5, "units": "percent" }
+        }
+      ]
+    }
+  ],
+  "constraints": [
+    {
+      "id": "discount-cap",
+      "description": "Discount must not exceed 30 percent",
+      "assert": {
+        "kind": "comparison",
+        "lhs": { "kind": "fact", "path": "order.discountPercent", "units": "percent" },
+        "operator": "lte",
+        "rhs": { "kind": "value", "value": 30, "units": "percent" }
+      },
+      "severity": "error"
+    }
+  ],
+  "examples": [
+    {
+      "id": "order-120",
+      "description": "Orders above 100 get 10 percent",
+      "input": { "order": { "total": 120, "vip": false } },
+      "expected": { "order": { "discountPercent": 10 } }
+    },
+    {
+      "id": "vip-order",
+      "description": "VIP gets at least 5 percent",
+      "input": { "order": { "total": 30, "vip": true } },
+      "expected": { "order": { "discountPercent": 5 } }
+    }
+  ],
+  "config": {
+    "ruleEvaluation": "first"
+  }
+}
