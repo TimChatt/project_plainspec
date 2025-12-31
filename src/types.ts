@@ -168,6 +168,7 @@ export interface RuleTrace {
 export interface ConstraintResult {
   constraint: Constraint;
   passed: boolean;
+  trace: ConditionTrace;
 }
 
 export interface ExecutionResult {
@@ -180,4 +181,5 @@ export interface ExampleResult {
   example: Example;
   passed: boolean;
   actualOutput: Record<string, unknown>;
+  constraints: ConstraintResult[];
 }

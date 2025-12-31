@@ -106,6 +106,10 @@ function splitTopLevel(text: string, keyword: 'and' | 'or'): string[] | null {
 
 function parseCondition(text: string, errors: string[]): Condition | undefined {
   const trimmed = text.trim().replace(/^\(+|\)+$/g, '');
+  const comparisonErrors: string[] = [];
+  const comparison = parseComparison(trimmed, comparisonErrors);
+  if (comparison) return comparison;
+
   const orParts = splitTopLevel(trimmed, 'or');
   if (orParts) {
     const conditions = orParts.map((part) => parseCondition(part, errors)).filter(Boolean) as Condition[];
@@ -120,7 +124,8 @@ function parseCondition(text: string, errors: string[]): Condition | undefined {
     const inner = parseCondition(trimmed.replace(/^not\s+/i, ''), errors);
     return inner ? { kind: 'not', condition: inner } : undefined;
   }
-  return parseComparison(trimmed, errors);
+  errors.push(...comparisonErrors);
+  return undefined;
 }
 
 function parseActions(text: string, errors: string[]): Action[] {

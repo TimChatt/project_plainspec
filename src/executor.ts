@@ -104,7 +104,7 @@ function evaluateConstraints(constraints: Constraint[] | undefined, data: Record
   if (!constraints) return [];
   return constraints.map((constraint) => {
     const trace = evaluateCondition(constraint.assert, data);
-    return { constraint, passed: trace.result };
+    return { constraint, passed: trace.result, trace };
   });
 }
 
@@ -157,7 +157,10 @@ export function runExamples(program: Program): ExampleResult[] {
 
   return program.examples.map((example) => {
     const result = runProgram(program, example.input);
-    const passed = expectationMatches(result.output, example.expected);
-    return { example, passed, actualOutput: result.output };
+    const constraintFailures = result.constraints.filter(
+      (c) => !c.passed && (c.constraint.severity ?? 'error') === 'error'
+    );
+    const passed = expectationMatches(result.output, example.expected) && constraintFailures.length === 0;
+    return { example, passed, actualOutput: result.output, constraints: result.constraints };
   });
 }

@@ -132,8 +132,14 @@ function handleExamples(args: string[]): void {
   console.log('\nRunning examples...');
   const results = runExamples(program);
   results.forEach((example) => {
+    const constraintSummary =
+      example.constraints.length > 0
+        ? ` | constraints: ${example.constraints
+            .map((c) => `${c.constraint.id}:${c.passed ? 'ok' : 'FAILED'}`)
+            .join(', ')}`
+        : '';
     console.log(
-      `${example.example.id}: ${example.passed ? 'passed' : 'FAILED'} -> ${JSON.stringify(example.actualOutput)}`
+      `${example.example.id}: ${example.passed ? 'passed' : 'FAILED'}${constraintSummary} -> ${JSON.stringify(example.actualOutput)}`
     );
   });
 }
@@ -151,7 +157,7 @@ function handleParse(args: string[]): void {
 
   if (parse.errors.length) {
     console.error('Parser errors:');
-    parse.errors.forEach((err) => console.error(`- ${err.message}`));
+    parse.errors.forEach((err) => console.error(`- ${err}`));
     process.exitCode = 1;
     return;
   }
@@ -183,8 +189,14 @@ function handleParse(args: string[]): void {
     console.log('\nRunning examples from parsed program...');
     const results = runExamples(program);
     results.forEach((example) => {
+      const constraintSummary =
+        example.constraints.length > 0
+          ? ` | constraints: ${example.constraints
+              .map((c) => `${c.constraint.id}:${c.passed ? 'ok' : 'FAILED'}`)
+              .join(', ')}`
+          : '';
       console.log(
-        `${example.example.id}: ${example.passed ? 'passed' : 'FAILED'} -> ${JSON.stringify(example.actualOutput)}`
+        `${example.example.id}: ${example.passed ? 'passed' : 'FAILED'}${constraintSummary} -> ${JSON.stringify(example.actualOutput)}`
       );
     });
   }

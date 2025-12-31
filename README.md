@@ -1,5 +1,18 @@
 # PlainSpec – English-Based Coding Language (V1)
 
+## TL;DR Codex Paste
+- Build an English-like language that compiles to a validated JSON AST and runs deterministically—LLM never executes logic.
+- Pick **one domain** (recommend business rules; alternatives: workflow, data transforms, game rules).
+- Pipeline: English spec → (optional LLM rewrite) → Controlled English or AST → Validate/Lint → Execute → Trace.
+- Controlled English supports definitions, rules, constraints, examples; bans vague terms, pronouns without reference, and implicit units.
+- AST nodes: Program, Entity (fields+types), Rule (conditions+actions+priority), Condition, Action (set/emit/route), Constraint, Example.
+- LLM translator returns **AST JSON** or **clarification questions**; flags ambiguity, normalises synonyms, lists assumptions.
+- Parser: deterministic Controlled-English → AST with clear errors.
+- Validator/Linter: schema validity, undefined refs, conflicts, explicit units, banned vague terms, constraint sanity; fail closed.
+- Engine: deterministic rules with priority + first/all modes; outputs result, fired rules, condition results, field changes, constraint checks.
+- Examples as tests must pass (configurable) before execution; failures show expected vs actual.
+- Minimal UI: panels for English Spec / Compiled AST / Run+Trace; buttons Translate, Validate, Run, Run Examples.
+
 Condensed, Codex-ready requirements for building PlainSpec, an English-like programming language that compiles into a typed, deterministic AST and executes via a rules engine.
 
 ## Goal
@@ -100,7 +113,8 @@ npm run cli -- parse examples/discount-program.cnl --out /tmp/program.json --run
 ### What gets checked
 - JSON Schema correctness for all nodes (program, entities, rules, constraints, examples).
 - Entity/field references in conditions and `set` actions.
-- Units: if a field declares units, referenced operands must specify them (warns when missing).
+- Units and types: comparisons and `set` actions must align with referenced field types, and operands must carry required units when a field declares them (warns when units are missing; errors when mismatched).
+- Examples: inputs and expected outputs must reference known entities/fields and align with declared field types (with warnings when numeric values omit required units).
 - Vague language: simple lint on rule/constraint names and descriptions.
 - Rule coverage: warns when no examples are provided or when a rule never fires in any example.
 - Rule execution: deterministic rule application (priority, first/all modes), constraint checks, and per-rule traces.
