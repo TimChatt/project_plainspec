@@ -13,9 +13,9 @@ export function assessRuleCoverage(program: Program): RuleCoverage[] {
   });
 
   program.examples.forEach((example) => {
-    const result = runProgram(program, example.input);
-    result.firedRules.forEach((trace) => {
-      if (trace.matched) counts[trace.rule.id] = (counts[trace.rule.id] ?? 0) + 1;
+    const result = runProgram(program, example.input, { enableActions: true });
+    result.trace.forEach((trace) => {
+      if (trace.evaluatedWhen) counts[trace.ruleId] = (counts[trace.ruleId] ?? 0) + 1;
     });
   });
 

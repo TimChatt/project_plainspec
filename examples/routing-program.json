@@ -1,0 +1,77 @@
+{
+  "domain": "business-rules",
+  "description": "Route high-risk applications to manual review",
+  "entities": [
+    {
+      "name": "risk",
+      "fields": [
+        { "name": "score", "type": "number" }
+      ]
+    },
+    {
+      "name": "route",
+      "fields": [
+        { "name": "toQueue", "type": "string" },
+        { "name": "reason", "type": "string" }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "high-risk",
+      "name": "Send scores 80+ to manual review",
+      "priority": 10,
+      "when": {
+        "kind": "comparison",
+        "lhs": { "kind": "fact", "path": "risk.score" },
+        "operator": "gte",
+        "rhs": { "kind": "value", "value": 80 }
+      },
+      "actions": [
+        { "kind": "route", "toQueue": "manual_review", "reason": "score_high" }
+      ]
+    },
+    {
+      "id": "auto-low-risk",
+      "name": "Auto-approve low risk",
+      "priority": 1,
+      "when": {
+        "kind": "comparison",
+        "lhs": { "kind": "fact", "path": "risk.score" },
+        "operator": "lt",
+        "rhs": { "kind": "value", "value": 80 }
+      },
+      "actions": [
+        { "kind": "route", "toQueue": "auto_approve", "reason": "score_low" }
+      ]
+    }
+  ],
+  "constraints": [
+    {
+      "id": "route-required",
+      "description": "A routing decision must be set",
+      "assert": {
+        "kind": "exists",
+        "fact": { "kind": "fact", "path": "route.toQueue" }
+      },
+      "severity": "error"
+    }
+  ],
+  "examples": [
+    {
+      "id": "high-score",
+      "description": "Score 90 routes to manual review",
+      "input": { "risk": { "score": 90 } },
+      "expected": { "route": { "toQueue": "manual_review", "reason": "score_high" } }
+    },
+    {
+      "id": "moderate-score",
+      "description": "Score 60 auto-approves",
+      "input": { "risk": { "score": 60 } },
+      "expected": { "route": { "toQueue": "auto_approve", "reason": "score_low" } }
+    }
+  ],
+  "config": {
+    "ruleEvaluation": "first"
+  }
+}

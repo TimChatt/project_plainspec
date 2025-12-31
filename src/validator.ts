@@ -1,27 +1,51 @@
-import { Action, Condition, Operand, Program, ScalarType, ValueOperand, ValidationResult } from './types';
+import { Action, Condition, Operand, Program, Rule, ScalarType, ValueOperand, ValidationResult } from './types';
 import { assessRuleCoverage } from './coverage';
 
 const bannedTerms = ['recent', 'large', 'soon', 'some', 'few'];
 
 function collectPathsFromCondition(condition: Condition): string[] {
   switch (condition.kind) {
-    case 'comparison': {
+    case 'comparison':
+    case 'compare': {
       const paths: string[] = [];
       if (condition.lhs.kind === 'fact') paths.push(condition.lhs.path);
       if (condition.rhs.kind === 'fact') paths.push(condition.rhs.path);
       return paths;
     }
+    case 'exists':
+      return condition.fact.kind === 'fact' ? [condition.fact.path] : [];
+    case 'in': {
+      const paths: string[] = [];
+      if (condition.value.kind === 'fact') paths.push(condition.value.path);
+      condition.options.forEach((opt) => {
+        if (opt.kind === 'fact') paths.push(opt.path);
+      });
+      return paths;
+    }
+    case 'matches':
+      return condition.value.kind === 'fact' ? [condition.value.path] : [];
     case 'all':
     case 'any':
+    case 'and':
+    case 'or':
       return condition.conditions.flatMap((c) => collectPathsFromCondition(c));
     case 'not':
       return collectPathsFromCondition(condition.condition);
+    default:
+      return [];
   }
 }
 
 function collectPathsFromAction(action: Action): string[] {
-  if (action.kind === 'set') return [action.target];
+  if (action.kind === 'set' || action.kind === 'increment' || action.kind === 'append') return [action.target];
+  // route/emit actions are side-effect oriented and not tied to entity paths
   return [];
+}
+
+function getRuleActions(rule: Rule): { thenActions: Action[]; elseActions: Action[]; allActions: Action[] } {
+  const thenActions = rule.then ?? rule.actions ?? [];
+  const elseActions = rule.else ?? [];
+  return { thenActions, elseActions, allActions: [...thenActions, ...elseActions] };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -39,8 +63,8 @@ function validateOperandShape(operand: any, context: string): string[] {
       errors.push(`${context} fact operand requires a string path.`);
     }
   } else if (operand.kind === 'value') {
-    if (!['string', 'number', 'boolean'].includes(typeof operand.value)) {
-      errors.push(`${context} value operand must be string, number, or boolean.`);
+    if (!['string', 'number', 'boolean'].includes(typeof operand.value) && operand.value !== null) {
+      errors.push(`${context} value operand must be string, number, boolean, or null.`);
     }
   } else {
     errors.push(`${context} has unknown operand kind "${operand.kind}".`);
@@ -54,8 +78,9 @@ function validateConditionShape(condition: any, context: string): string[] {
   if (!isObject(condition)) return [`${context} must be a condition object.`];
 
   switch (condition.kind) {
-    case 'comparison': {
-      const operators = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'in'];
+    case 'comparison':
+    case 'compare': {
+      const operators = ['==', '!=', '>', '>=', '<', '<=', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'in'];
       if (typeof condition.operator !== 'string' || !operators.includes(condition.operator)) {
         errors.push(`${context} comparison has unknown operator.`);
       }
@@ -64,7 +89,9 @@ function validateConditionShape(condition: any, context: string): string[] {
       break;
     }
     case 'all':
-    case 'any': {
+    case 'any':
+    case 'and':
+    case 'or': {
       if (!Array.isArray(condition.conditions) || condition.conditions.length === 0) {
         errors.push(`${context} must include at least one child condition.`);
       } else {
@@ -76,6 +103,28 @@ function validateConditionShape(condition: any, context: string): string[] {
     }
     case 'not': {
       errors.push(...validateConditionShape(condition.condition, `${context}.condition`));
+      break;
+    }
+    case 'exists': {
+      errors.push(...validateOperandShape(condition.fact, `${context}.fact`));
+      break;
+    }
+    case 'in': {
+      errors.push(...validateOperandShape(condition.value, `${context}.value`));
+      if (!Array.isArray(condition.options) || condition.options.length === 0) {
+        errors.push(`${context} must include a non-empty options array.`);
+      } else {
+        condition.options.forEach((opt: any, idx: number) => {
+          errors.push(...validateOperandShape(opt, `${context}.options[${idx}]`));
+        });
+      }
+      break;
+    }
+    case 'matches': {
+      errors.push(...validateOperandShape(condition.value, `${context}.value`));
+      if (typeof condition.pattern !== 'string') {
+        errors.push(`${context}.pattern must be a string.`);
+      }
       break;
     }
     default:
@@ -97,6 +146,22 @@ function validateActionShape(action: any, context: string): string[] {
       errors.push(...validateOperandShape(action.value, `${context}.value`));
       break;
     }
+    case 'increment': {
+      if (typeof action.target !== 'string') {
+        errors.push(`${context} increment action requires a string target.`);
+      }
+      if (typeof action.value !== 'number') {
+        errors.push(`${context} increment action requires a numeric value.`);
+      }
+      break;
+    }
+    case 'append': {
+      if (typeof action.target !== 'string') {
+        errors.push(`${context} append action requires a string target.`);
+      }
+      errors.push(...validateOperandShape(action.value, `${context}.value`));
+      break;
+    }
     case 'emit': {
       if (typeof action.event !== 'string') {
         errors.push(`${context} emit action requires an event name.`);
@@ -104,7 +169,7 @@ function validateActionShape(action: any, context: string): string[] {
       break;
     }
     case 'route': {
-      if (typeof action.queue !== 'string') {
+      if (typeof action.toQueue !== 'string') {
         errors.push(`${context} route action requires a queue name.`);
       }
       break;
@@ -150,14 +215,17 @@ function validateProgramShape(program: Program): string[] {
       if (!rule.id) errors.push(`Rule[${idx}] is missing an id.`);
       if (!rule.name) errors.push(`Rule[${rule.id || idx}] is missing a name.`);
       errors.push(...validateConditionShape(rule.when, `Rule ${rule.id || idx}.when`));
-      if (!Array.isArray(rule.actions) || rule.actions.length === 0) {
-        errors.push(`Rule ${rule.id || idx} must include at least one action.`);
-      } else {
-        rule.actions.forEach((action, actionIdx) => {
-          errors.push(...validateActionShape(action, `Rule ${rule.id || idx}.actions[${actionIdx}]`));
-        });
+      const { thenActions, elseActions, allActions } = getRuleActions(rule);
+      if (!Array.isArray(allActions) || allActions.length === 0) {
+        errors.push(`Rule ${rule.id || idx} must include at least one action in "then"/"actions" or "else".`);
       }
-      if (rule.mode && !['all', 'first'].includes(rule.mode)) {
+      thenActions.forEach((action, actionIdx) => {
+        errors.push(...validateActionShape(action, `Rule ${rule.id || idx}.actions[${actionIdx}]`));
+      });
+      elseActions.forEach((action, actionIdx) => {
+        errors.push(...validateActionShape(action, `Rule ${rule.id || idx}.else[${actionIdx}]`));
+      });
+      if (rule.mode && !['all', 'first', 'allMatches', 'firstMatch'].includes(rule.mode)) {
         errors.push(`Rule ${rule.id || idx} has invalid mode ${rule.mode}.`);
       }
     });
@@ -175,8 +243,12 @@ function validateProgramShape(program: Program): string[] {
     if (!isObject(example.expected)) errors.push(`Example ${example.id || idx} expected must be an object.`);
   });
 
-  if (program.config && program.config.ruleEvaluation && !['all', 'first'].includes(program.config.ruleEvaluation)) {
-    errors.push('Config.ruleEvaluation must be either "all" or "first".');
+  if (
+    program.config &&
+    program.config.ruleEvaluation &&
+    !['all', 'first', 'allMatches', 'firstMatch'].includes(program.config.ruleEvaluation)
+  ) {
+    errors.push('Config.ruleEvaluation must be one of "all", "first", "allMatches", or "firstMatch".');
   }
 
   return errors;
@@ -334,7 +406,7 @@ function validateOperandType(
 }
 
 function validateComparisonTypes(
-  condition: Extract<Condition, { kind: 'comparison' }>,
+  condition: Extract<Condition, { kind: 'comparison' | 'compare' }>,
   entities: Program['entities'],
   context: string,
   errors: string[],
@@ -369,7 +441,8 @@ function detectConflictingSetActions(program: Program): string[] {
 
   for (let i = 0; i < program.rules.length; i++) {
     const ruleA = program.rules[i];
-    const setActionsA = ruleA.actions.filter((a): a is Extract<Action, { kind: 'set' }> => a.kind === 'set');
+    const { allActions: allActionsA } = getRuleActions(ruleA);
+    const setActionsA = allActionsA.filter((a): a is Extract<Action, { kind: 'set' }> => a.kind === 'set');
     const priorityA = ruleA.priority ?? defaultPriority;
 
     for (let j = i + 1; j < program.rules.length; j++) {
@@ -378,7 +451,8 @@ function detectConflictingSetActions(program: Program): string[] {
 
       if (priorityA !== priorityB) continue; // precedence resolves conflicts
 
-      const setActionsB = ruleB.actions.filter((a): a is Extract<Action, { kind: 'set' }> => a.kind === 'set');
+      const { allActions: allActionsB } = getRuleActions(ruleB);
+      const setActionsB = allActionsB.filter((a): a is Extract<Action, { kind: 'set' }> => a.kind === 'set');
       setActionsA.forEach((actionA) => {
         setActionsB.forEach((actionB) => {
           if (actionA.target !== actionB.target) return;
@@ -405,7 +479,7 @@ function validateConditionTypesRecursive(
   errors: string[],
   warnings: string[]
 ) {
-  if (condition.kind === 'comparison') {
+  if (condition.kind === 'comparison' || condition.kind === 'compare') {
     validateComparisonTypes(condition, entities, context, errors, warnings);
     return;
   }
@@ -415,9 +489,11 @@ function validateConditionTypesRecursive(
     return;
   }
 
-  condition.conditions.forEach((child, idx) =>
-    validateConditionTypesRecursive(child, entities, `${context}.conditions[${idx}]`, errors, warnings)
-  );
+  if ('conditions' in condition) {
+    condition.conditions.forEach((child, idx) =>
+      validateConditionTypesRecursive(child, entities, `${context}.conditions[${idx}]`, errors, warnings)
+    );
+  }
 }
 
 function validateSetAction(
@@ -435,6 +511,28 @@ function validateSetAction(
   validateOperandType(action.value, field.type, `action on ${action.target}`, entities, errors, warnings);
 }
 
+function validateIncrementAction(action: Extract<Action, { kind: 'increment' }>, entities: Program['entities'], errors: string[]) {
+  const { field, error } = getField(action.target, entities);
+  if (error || !field) {
+    errors.push(error ?? `Unknown field for target ${action.target}`);
+    return;
+  }
+  if (field.type !== 'number') {
+    errors.push(`Increment action on ${action.target} requires numeric field.`);
+  }
+}
+
+function validateAppendAction(
+  action: Extract<Action, { kind: 'append' }>,
+  entities: Program['entities'],
+  errors: string[],
+  warnings: string[],
+) {
+  const { error } = getField(action.target, entities);
+  if (error) errors.push(error);
+  validateOperandType(action.value, undefined, `action on ${action.target}`, entities, errors, warnings);
+}
+
 export function validateProgram(program: Program): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -445,14 +543,34 @@ export function validateProgram(program: Program): ValidationResult {
     // Cross-reference paths
     const paths = new Set<string>();
     program.rules.forEach((rule, ruleIdx) => {
+      const { thenActions, elseActions, allActions } = getRuleActions(rule);
       collectPathsFromCondition(rule.when).forEach((p) => paths.add(p));
-      rule.actions.forEach((action) => collectPathsFromAction(action).forEach((p) => paths.add(p)));
+      allActions.forEach((action) => collectPathsFromAction(action).forEach((p) => paths.add(p)));
 
       validateConditionTypesRecursive(rule.when, program.entities, `Rule ${rule.id || ruleIdx}.when`, errors, warnings);
 
-      rule.actions
+      thenActions
         .filter((a): a is Extract<Action, { kind: 'set' }> => a.kind === 'set')
         .forEach((action) => validateSetAction(action, program.entities, errors, warnings));
+      elseActions
+        .filter((a): a is Extract<Action, { kind: 'set' }> => a.kind === 'set')
+        .forEach((action) => validateSetAction(action, program.entities, errors, warnings));
+
+      thenActions
+        .filter((a): a is Extract<Action, { kind: 'increment' }> => a.kind === 'increment')
+        .forEach((action) => validateIncrementAction(action, program.entities, errors));
+
+      elseActions
+        .filter((a): a is Extract<Action, { kind: 'increment' }> => a.kind === 'increment')
+        .forEach((action) => validateIncrementAction(action, program.entities, errors));
+
+      thenActions
+        .filter((a): a is Extract<Action, { kind: 'append' }> => a.kind === 'append')
+        .forEach((action) => validateAppendAction(action, program.entities, errors, warnings));
+
+      elseActions
+        .filter((a): a is Extract<Action, { kind: 'append' }> => a.kind === 'append')
+        .forEach((action) => validateAppendAction(action, program.entities, errors, warnings));
     });
     program.constraints?.forEach((constraint, idx) => {
       collectPathsFromCondition(constraint.assert).forEach((p) => paths.add(p));

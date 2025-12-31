@@ -1,0 +1,76 @@
+{
+  "domain": "business-rules",
+  "description": "Demonstrate conflict logging when multiple rules write the same field",
+  "entities": [
+    {
+      "name": "order",
+      "fields": [
+        { "name": "total", "type": "number" },
+        { "name": "vip", "type": "boolean" },
+        { "name": "discountPercent", "type": "number", "units": "percent" }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "vip-bonus",
+      "name": "VIPs get higher discount",
+      "priority": 5,
+      "when": {
+        "kind": "comparison",
+        "lhs": { "kind": "fact", "path": "order.vip" },
+        "operator": "eq",
+        "rhs": { "kind": "value", "value": true }
+      },
+      "actions": [
+        {
+          "kind": "set",
+          "target": "order.discountPercent",
+          "value": { "kind": "value", "value": 20, "units": "percent" }
+        }
+      ]
+    },
+    {
+      "id": "high-spend",
+      "name": "High spenders qualify for 10%",
+      "priority": 1,
+      "when": {
+        "kind": "comparison",
+        "lhs": { "kind": "fact", "path": "order.total", "units": "USD" },
+        "operator": "gte",
+        "rhs": { "kind": "value", "value": 150, "units": "USD" }
+      },
+      "actions": [
+        {
+          "kind": "set",
+          "target": "order.discountPercent",
+          "value": { "kind": "value", "value": 10, "units": "percent" }
+        }
+      ]
+    }
+  ],
+  "constraints": [
+    {
+      "id": "discount-ceiling",
+      "description": "Discount should not exceed 30%",
+      "assert": {
+        "kind": "comparison",
+        "lhs": { "kind": "fact", "path": "order.discountPercent", "units": "percent" },
+        "operator": "lte",
+        "rhs": { "kind": "value", "value": 30, "units": "percent" }
+      },
+      "severity": "error"
+    }
+  ],
+  "examples": [
+    {
+      "id": "vip-high-spend",
+      "description": "VIP with high total triggers both rules",
+      "input": { "order": { "total": 200, "vip": true } },
+      "expected": { "order": { "discountPercent": 10 } }
+    }
+  ],
+  "config": {
+    "ruleEvaluation": "all"
+  }
+}
